@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentConnect Pro</title>
+    <script>
+      // Defensive measure against libraries trying to overwrite read-only fetch
+      (function() {
+        if (typeof window !== 'undefined' && window.fetch) {
+          const _fetch = window.fetch;
+          try {
+            Object.defineProperty(window, 'fetch', {
+              configurable: true,
+              enumerable: true,
+              get: function() { return _fetch; },
+              set: function() { console.warn('Attempted to overwrite window.fetch - blocked.'); }
+            });
+          } catch (e) {
+            // If it's already non-configurable, we can't do much, but the error might persist
+            // This script tries to make it "settable" but as a no-op to avoid the TypeError
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
