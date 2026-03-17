@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { 
   Search, 
   Linkedin, 
@@ -77,8 +76,9 @@ export default function App() {
       return;
     }
 
-    if (!url.includes('linkedin.com') && !url.includes('bayut.com') && !url.includes('propertyfinder.ae')) {
-      setError("Only LinkedIn, Bayut.com, and Propertyfinder.ae URLs are supported currently.");
+  const extractAgentInfo = async () => {
+    if (!url.trim()) {
+      setError("Please enter a valid LinkedIn, Bayut, or Property Finder profile URL.");
       return;
     }
 
@@ -87,49 +87,51 @@ export default function App() {
     setResult(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      const prompt = `
-        Extract the professional details of the real estate agent from this URL: ${url}
-        
-        I need:
-        1. Full Name
-        2. WhatsApp Number (in international format, e.g., +971...)
-        3. Agency Name
-        4. Location (if available)
-        
-        This URL is from ${url.includes('propertyfinder.ae') ? 'Property Finder' : url.includes('bayut.com') ? 'Bayut' : 'LinkedIn'}.
-        If the WhatsApp number is not directly visible on the page, use Google Search to find the contact details for this specific agent (Name + Agency).
-        Return the data in a clean JSON format.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          tools: [{ urlContext: {} }, { googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              name: { type: "STRING" },
-              whatsapp: { type: "STRING", description: "WhatsApp number in international format" },
-              agency: { type: "STRING" },
-              location: { type: "STRING" }
-            },
-            required: ["name", "whatsapp", "agency"]
-          }
+      // 1. Call OpenRouter API
+      const response = await fetch("https://openrouter.ai", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://github.com", // Required by OpenRouter
+          "X-Title": "AgentConnect Pro",
+          "Content-Type": "application/json"
         },
+        body: JSON.stringify({
+          "model": "z-ai/glm-4.5-air:free",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a data extraction assistant. Respond ONLY with raw JSON."
+            },
+            {
+              "role": "user",
+              "content": `Extract the professional details of the real estate agent from this URL: ${url}. 
+              Return a JSON object with these keys: "name", "whatsapp" (international format), "agency", and "location". 
+              If a value is unknown, use null.`
+            }
+          ],
+          "response_format": { "type": "json_object" }
+        })
       });
 
-      const data = JSON.parse(response.text || '{}');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Failed to connect to OpenRouter");
+      }
+
+      const resData = await response.json();
+      const content = resData.choices[0].message.content;
+      const data = JSON.parse(content || '{}');
       
-      if (!data.whatsapp || data.whatsapp === "Not found") {
+      if (!data.whatsapp) {
         throw new Error("Could not find a WhatsApp number for this agent.");
       }
 
       const agentInfo: AgentInfo = {
-        ...data,
+        name: data.name || "Unknown Name",
+        whatsapp: data.whatsapp,
+        agency: data.agency || "Unknown Agency",
+        location: data.location || "Dubai",
         sourceUrl: url,
         timestamp: Date.now()
       };
@@ -139,7 +141,7 @@ export default function App() {
       setUrl('');
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "An error occurred while extracting information. The profile might be private or protected.");
+      setError(err.message || "An error occurred during extraction.");
     } finally {
       setLoading(false);
     }
