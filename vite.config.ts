@@ -23,3 +23,20 @@ export default defineConfig(({mode}) => {
     },
   };
 });
+// vite.config.ts
+import { defineConfig, loadEnv } from 'vite';
+// ... other imports
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, '.', '');
+  return {
+    base: '/agent-connect/', // YOUR REPO NAME
+    plugins: [/* your plugins */],
+    define: {
+      // Map your OpenRouter key here
+      'process.env.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': JSON.stringify(env.OPENROUTER_API_KEY),
+      'global': 'window',
+    },
+    // ... rest of config
+  };
+});
